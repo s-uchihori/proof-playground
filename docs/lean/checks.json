@@ -49,6 +49,25 @@
         "⊢ ‖u‖ ^ 2 - inner ℝ u v * 2 + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2",
         "終了コード 1"
       ]
+    },
+    {
+      "name": "where-defined",
+      "cmd": "cd ../../lean/with-mathlib && PATH=\"$HOME/.elan/bin:$PATH\" lake env lean ../../docs/lean/examples/WhereDefined.lean",
+      "expect": [
+        "EuclideanSpace は Mathlib.",
+        "Real は Mathlib.",
+        "Norm は Mathlib.",
+        "Inner は Mathlib.",
+        "HPow は Init.Prelude で定義"
+      ]
+    },
+    {
+      "name": "rh-def",
+      "cmd": "cd ../../lean/with-mathlib && PATH=\"$HOME/.elan/bin:$PATH\" lake env lean ../../docs/lean/examples/RiemannHypothesisDef.lean",
+      "expect": [
+        "def RiemannHypothesis : Prop :=",
+        "riemannZeta s = 0 → (¬∃ n, s = -2 * (↑n + 1)) → s ≠ 1 → s.re = 1 / 2"
+      ]
     }
   ]
 }
