@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 380" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Hiragino Sans', sans-serif">
+  <title id="t">Lean のビルドが通ったときに保証される範囲</title>
+  <desc id="d">外側の枠は人が判断すること。定義と前提が、言いたいことを写しているか。内側の枠は Lean が検査したこと。前提と定義から結論が一歩ずつ出ること。</desc>
+  <style>
+    .outer { fill: #f6f8fa; stroke: #57606a; }
+    .inner { fill: #dafbe1; stroke: #1a7f37; }
+    .h { fill: #1f2328; font-size: 17px; font-weight: 700; }
+    .b { fill: #1f2328; font-size: 15px; }
+    .code { fill: #1f2328; font-size: 15px; font-family: ui-monospace, Menlo, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .outer { fill: #161b22; stroke: #8b949e; }
+      .inner { fill: #12261e; stroke: #3fb950; }
+      .h, .b, .code { fill: #e6edf3; }
+    }
+  </style>
+  <rect class="outer" x="8" y="8" width="504" height="364" rx="12" stroke-width="2"/>
+  <text class="h" x="28" y="42">人が判断すること</text>
+  <text class="b" x="28" y="68">定義と前提は、言いたいことを正しく写しているか</text>
+  <text class="b" x="28" y="92">（距離をこう定義してよいか、直角をこう書いてよいか）</text>
+  <rect class="inner" x="28" y="116" width="464" height="236" rx="10" stroke-width="2"/>
+  <text class="h" x="48" y="150">Lean が検査したこと</text>
+  <text class="b" x="48" y="176">前提と定義から、結論が一歩ずつ出ること</text>
+  <text class="code" x="48" y="222">前提  h : inner u v = 0</text>
+  <text class="code" x="48" y="250">定義  ‖u‖ や inner は Mathlib のもの</text>
+  <text class="code" x="48" y="292">結論  ‖u - v‖² = ‖u‖² + ‖v‖²</text>
+  <text class="b" x="48" y="328">ビルドが通った ＝ ここに飛躍が無い</text>
+</svg>

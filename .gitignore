@@ -7,3 +7,13 @@ states/
 *_TTrace_*.bin
 # Lean のビルド成果物と、Mathlib などの依存（数 GB）
 .lake/
+
+# docs/ の検証と HTML 化に使う npm の依存
+node_modules/
+# first-reader（読み手役の試読）の作業ファイル
+.first-reader/
+# 検証の作業ファイル（vlmkit の報告、図を目で見るシート、<details> を開いた検査用の HTML）
+test-results/
+.figure-check/
+*.open.html
+.vlmkit/

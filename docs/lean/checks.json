@@ -1,0 +1,54 @@
+{
+  "checks": [
+    {
+      "name": "lean-mathlib-build",
+      "cmd": "make -s -C ../.. lean-mathlib",
+      "expect": [
+        "Build completed successfully"
+      ]
+    },
+    {
+      "name": "lean-broken",
+      "cmd": "make -s -C ../.. lean-broken",
+      "expect": [
+        "broken/SumFormulaBroken.lean:25:8: error:",
+        "⊢ 2 * sumTo k + 2 * (k + 1) = (k + 1) * (k + 1 + 1)"
+      ]
+    },
+    {
+      "name": "pythagoras-goals",
+      "cmd": "cd ../../lean/with-mathlib && PATH=\"$HOME/.elan/bin:$PATH\" lake env lean ../../docs/lean/examples/PythagorasGoals.lean && echo 'exit 0: 証明は通った'",
+      "expect": [
+        "⊢ ‖u - v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2",
+        "⊢ ‖u‖ ^ 2 - 2 * inner ℝ u v + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2",
+        "⊢ ‖u‖ ^ 2 - 2 * 0 + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2",
+        "exit 0: 証明は通った"
+      ]
+    },
+    {
+      "name": "vacuous",
+      "cmd": "cd ../../lean/basics && PATH=\"$HOME/.elan/bin:$PATH\" lake env lean ../../docs/lean/examples/Vacuous.lean && echo 'エラーなし（定理 nonsense は通った）'",
+      "expect": [
+        "エラーなし（定理 nonsense は通った）"
+      ]
+    },
+    {
+      "name": "sorry",
+      "cmd": "cd ../../lean/basics && PATH=\"$HOME/.elan/bin:$PATH\" lake env lean ../../docs/lean/examples/Sorry.lean; echo \"終了コード $?\"",
+      "expect": [
+        "Sorry.lean:6:8: warning: declaration uses `sorry`",
+        "終了コード 0"
+      ]
+    },
+    {
+      "name": "pythagoras-without-h",
+      "cmd": "cd ../../lean/with-mathlib && PATH=\"$HOME/.elan/bin:$PATH\" lake env lean ../../docs/lean/examples/PythagorasWithoutH.lean; echo \"終了コード $?\"",
+      "expect": [
+        "The `ring` tactic failed to close the goal.",
+        "error: unsolved goals",
+        "⊢ ‖u‖ ^ 2 - inner ℝ u v * 2 + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2",
+        "終了コード 1"
+      ]
+    }
+  ]
+}

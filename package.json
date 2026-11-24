@@ -1,0 +1,12 @@
+{
+  "name": "proof-playground",
+  "private": true,
+  "description": "docs/ の解説文書を検証・HTML 化するための道具（npm i で入る）",
+  "type": "module",
+  "devDependencies": {
+    "@mizchi/vlmkit": "^0.24.0",
+    "@mizchi/vlmkit-anim": "^0.23.2",
+    "marked": "^18.3.0",
+    "playwright": "^1.65.1"
+  }
+}

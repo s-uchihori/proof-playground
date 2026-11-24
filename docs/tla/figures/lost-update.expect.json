@@ -1,0 +1,16 @@
+{
+  "format": "vlmkit-anim/expect@1",
+  "nodes": [
+    "A",
+    "db",
+    "B"
+  ],
+  "messages": [
+    "A->db:State 2: 読む",
+    "db->A:0",
+    "B->db:State 3: 読む",
+    "db->B:0",
+    "A->db:State 4: 0 + 1 を書く",
+    "B->db:State 5: 0 + 1 を書く"
+  ]
+}

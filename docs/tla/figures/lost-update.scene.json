@@ -1,0 +1,68 @@
+{
+  "format": "vlmkit-anim/scene@1",
+  "kind": "sequence",
+  "title": "TLC の反例: リクエスト A と B の更新が消える手順",
+  "participants": [
+    {
+      "id": "A",
+      "label": "A",
+      "kind": "actor"
+    },
+    {
+      "id": "db",
+      "label": "DB（likes）",
+      "kind": "system"
+    },
+    {
+      "id": "B",
+      "label": "B",
+      "kind": "actor"
+    }
+  ],
+  "messages": [
+    {
+      "from": "A",
+      "to": "db",
+      "label": "State 2: 読む",
+      "caption": "State 2: A が likes を読む"
+    },
+    {
+      "from": "db",
+      "to": "A",
+      "label": "0",
+      "kind": "return",
+      "caption": "A の手元の値は 0"
+    },
+    {
+      "from": "B",
+      "to": "db",
+      "label": "State 3: 読む",
+      "caption": "State 3: B が likes を読む"
+    },
+    {
+      "from": "db",
+      "to": "B",
+      "label": "0",
+      "kind": "return",
+      "caption": "B の手元の値は 0"
+    },
+    {
+      "from": "A",
+      "to": "db",
+      "label": "State 4: 0 + 1 を書く",
+      "kind": "async",
+      "caption": "State 4: A が 0 + 1 を書く。likes は 1"
+    },
+    {
+      "from": "B",
+      "to": "db",
+      "label": "State 5: 0 + 1 を書く",
+      "kind": "async",
+      "caption": "State 5: B が 0 + 1 を書く。likes は 1"
+    },
+    {
+      "note": "2つとも終わって likes = 1",
+      "at": "db"
+    }
+  ]
+}

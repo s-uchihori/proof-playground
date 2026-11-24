@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lean の「証明が通った」は何を保証したのか</title>
+<style>
+:root { --bg: #ffffff; --fg: #1f2328; --muted: #57606a; --line: #d0d7de; --code: #f6f8fa; --accent: #0550ae; --fig: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0d1117; --fg: #e6edf3; --muted: #9da7b3; --line: #30363d; --code: #161b22; --accent: #79c0ff; --fig: #ffffff; }
+}
+:root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #9da7b3; --line: #30363d; --code: #161b22; --accent: #79c0ff; --fig: #ffffff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.75 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 96px; }
+h1 { font-size: 1.8rem; line-height: 1.35; }
+h2 { margin-top: 2.6em; padding-top: .6em; border-top: 1px solid var(--line); font-size: 1.35rem; }
+h3 { margin-top: 1.8em; font-size: 1.1rem; }
+a { color: var(--accent); }
+code { background: var(--code); padding: .1em .3em; border-radius: 4px; font-size: .9em; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; font-size: .93rem; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+blockquote { margin: 1em 0; padding: .2em 1em; border-left: 4px solid var(--line); color: var(--muted); }
+figure { margin: 1.5em 0; }
+figure svg { display: block; max-width: 100%; max-height: 720px; width: auto; height: auto; margin: 0 auto; background: var(--fig); border-radius: 6px; }
+main img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+figcaption { color: var(--muted); font-size: .9rem; text-align: center; margin-top: .4em; }
+.play { margin-left: .5em; white-space: nowrap; }
+details { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin: .6em 0; }
+summary { cursor: pointer; font-weight: 600; }
+nav.book { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: .93rem; }
+</style>
+</head>
+<body><main>
+
+<h1>Lean の「証明が通った」は何を保証したのか</h1>
+<blockquote>
+<p><strong>想定読者</strong>：Lean を知らないエンジニア。テストや CI の緑は見慣れていて、高校数学（帰納法、二次式の展開、三平方の定理）は覚えている前提で書いた（この前提は書き手の推測。理由は末尾の「この資料が置いた前提」）。
+<strong>省いたもの</strong>：道具の入れ方（<a href="../../README.md#%E9%81%93%E5%85%B7%E3%81%AE%E5%85%A5%E3%82%8C%E6%96%B9">リポジトリの README</a>）、タクティクの網羅、Lean の型理論。
+<strong>所要時間</strong>：13 分。手元で走らせなくても読める。
+<strong>検証方法</strong>：本文に引用した出力とコードは、<code>checks.json</code> のコマンドで再実行し、実物と照合している（付録）。</p>
+</blockquote>
+<p>型チェックが通っても、関数が仕様どおりに動くとは限りません。テストは、選んだ入力でしか確かめません。
+Lean は、型チェックを「どんな入力でも、この性質が成り立つ」まで広げた道具で、証明の検査も型チェックとして行います。だから、ライブラリや製品の説明にある「形式検証済み」や、レビューで受け取る「Lean で証明した」（人が書いたものでも、AI が書いたものでも）は、テストの緑より強いものに見えます。
+<strong>ビルドが通って保証されるのは、書いた前提と定義から、書いた結論まで、飛躍が一歩も無いことです。</strong>
+前提と定義が言いたいことを写しているかは保証されないので、同じ「通った」でも、主張の強さは書き方しだいで変わります。期待値を実装から計算してしまったテストが、何も確かめていないのと同じ構造です。</p>
+<p>この落とし穴は、プログラムの性質でも同じです。たとえば「ソート関数の出力は昇順」だけを定理にすると、空のリストを返す関数でも通ります（3節）。
+この資料は、それを三平方の定理で見せます。例が数学なのは、正しいかどうかを読み手が自分で判定できる題材だからです。読み終えたら、「証明が通った」と聞いたときにどこを読めばよいかが言えるようになります。</p>
+<details>
+<summary>この資料の構成</summary><table>
+<thead>
+<tr>
+<th>節</th>
+<th>役割</th>
+<th>見せるもの</th>
+<th>なぜ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>「通った」が何を保証し、何を保証しないかを言えるようにする</td>
+<td>通ったとき・壊れたときの出力、前提が成り立たない定理、<code>sorry</code></td>
+<td>緑を過大に受け取るのが一番の落とし穴</td>
+</tr>
+<tr>
+<td>2</td>
+<td>短い証明を1行ずつ追えるようにする</td>
+<td>三平方の定理（ベクトル版）の3行と、各行のあとのゴール</td>
+<td>証明を読めないと、何を示したかも読めない</td>
+</tr>
+<tr>
+<td>3</td>
+<td>前提と定義で主張の強さが変わることを、三平方の定理で見る</td>
+<td>座標版・ベクトル版・Mathlib 版の定理の文</td>
+<td>「通った」より「何を示したか」を読む習慣のため</td>
+</tr>
+<tr>
+<td>4</td>
+<td>TLA+ との違いを一言で言えるようにする</td>
+<td>有限個の総当たりと、無限の場合の証明</td>
+<td>2つを一括りにしないため</td>
+</tr>
+<tr>
+<td>5</td>
+<td>レビューに持ち帰る</td>
+<td>チェックリスト</td>
+<td>1〜3 節を、人の「証明した」を読む形にする</td>
+</tr>
+</tbody></table>
+</details><h2>0. 一枚で</h2>
+<table>
+<thead>
+<tr>
+<th>問い</th>
+<th>答え</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>「通った」で何が言えるか</td>
+<td>書いた前提と定義のもとで、書いた結論が正しい。どの一歩にも飛躍が無い</td>
+</tr>
+<tr>
+<td>何が言えないか</td>
+<td>定義と前提が、言いたいことを写しているか。前提が成り立ちえないなら、何も言っていない。<code>sorry</code> が残っていれば、その証明は無い</td>
+</tr>
+<tr>
+<td>証明はどう読むか</td>
+<td>Lean は「まだ示せていないこと」（ゴール）を持っている。1行ごとにゴールが書き換わるので、前後を見比べる</td>
+</tr>
+<tr>
+<td>TLA+ とどう違うか</td>
+<td>総当たりではないので、無限にある場合もまとめて示せる。そのかわり、証明は人が書く</td>
+</tr>
+</tbody></table>
+<h2>1. 「通った」が保証すること</h2>
+<p>Lean では、示したい命題と、その証明を書きます。
+証明は<strong>タクティク</strong>（証明を一歩進める命令）を1行ずつ並べたもので、Lean は一歩ずつ検査します。</p>
+<p>全部の一歩がつながっていれば、Lean は何も言わずに通します。
+<code>make lean-mathlib</code>（三平方の定理などの例をビルドする）の最後の行はこうです。</p>
+<pre><code class="language-text">Build completed successfully (18260 jobs).
+</code></pre>
+<p>一歩でもつながらなければ、止まった行と、そのとき残っている<strong>ゴール</strong>（まだ示せていないこと）を出します。
+次は、「1 + 2 + ... + n の2倍 = n(n + 1)」の帰納法の証明から、帰納法の仮定を使う1行をわざと消したものです（<code>make lean-broken</code>）。</p>
+<pre><code class="language-text">broken/SumFormulaBroken.lean:25:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?n * ?k + ?m * ?k
+in the target expression
+  2 * sumTo k + 2 * (k + 1) = (k + 1) * (k + 1 + 1)
+
+case succ
+k : Nat
+ih : 2 * sumTo k = k * (k + 1)
+⊢ 2 * sumTo k + 2 * (k + 1) = (k + 1) * (k + 1 + 1)
+</code></pre>
+<p><code>:25:8</code> が止まった行（25 行目）です。
+<code>?n</code> のように <code>?</code> の付いた名前は「何が入ってもよい穴」で、Lean は「（何か）×（共通のもの）＋（何か）×（共通のもの）」という形を探して見つけられなかった、と言っています。
+<code>⊢</code> の右が、まだ示せていないゴールで、その上の行が手元にある前提です。
+前提に帰納法の仮定 <code>ih</code> があるのに、ゴールには <code>2 * sumTo k</code> が残ったままで、次の変形の形になっていない、と言っています。</p>
+<p><strong>Lean は「だいたい合っている」では通しません。</strong>
+ただし、検査するのは「前提と定義から結論が出るか」だけです。
+次の定理は、前提 <code>h : n &lt; 0</code>（n は 0 より小さい）を置いています。</p>
+<pre><code class="language-lean">theorem nonsense (n : Nat) (h : n &lt; 0) : n = 42 := by
+  omega                     -- 前提 h が矛盾していることを見つけて、証明を閉じる
+</code></pre>
+<pre><code class="language-text">エラーなし（定理 nonsense は通った）
+</code></pre>
+<p>0 より小さい自然数は無いので、この定理はどんな n についても何も言っていません。
+それでも「前提から結論が出る」は正しい（前提が偽なら、何でも出せる）ので、Lean は通します。</p>
+<p>もう1つ、<code>sorry</code> は「この証明はあとで書く」という仮置きで、Lean は警告を出しますが、エラーにはしません。</p>
+<pre><code class="language-text">Sorry.lean:6:8: warning: declaration uses `sorry`
+終了コード 0
+</code></pre>
+<p>「ビルドが通った」と聞いたら、警告に <code>sorry</code> が無いかも見ます。</p>
+<p>ここまでをまとめると、次の図の内側が Lean の保証で、外側は人が読んで判断するところです。</p>
+<figure role="img" aria-label="外側の枠は人が判断すること：定義と前提は、言いたいことを正しく写しているか。内側の枠は Lean が検査したこと：前提と定義から、結論が一歩ずつ出ること。例として、前提 inner u v = 0、定義は Mathlib のもの、結論 ‖u - v‖² = ‖u‖² + ‖v‖²"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 380" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Hiragino Sans', sans-serif">
+  <title id="t">Lean のビルドが通ったときに保証される範囲</title>
+  <desc id="d">外側の枠は人が判断すること。定義と前提が、言いたいことを写しているか。内側の枠は Lean が検査したこと。前提と定義から結論が一歩ずつ出ること。</desc>
+  <style>
+    .outer { fill: #f6f8fa; stroke: #57606a; }
+    .inner { fill: #dafbe1; stroke: #1a7f37; }
+    .h { fill: #1f2328; font-size: 17px; font-weight: 700; }
+    .b { fill: #1f2328; font-size: 15px; }
+    .code { fill: #1f2328; font-size: 15px; font-family: ui-monospace, Menlo, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .outer { fill: #161b22; stroke: #8b949e; }
+      .inner { fill: #12261e; stroke: #3fb950; }
+      .h, .b, .code { fill: #e6edf3; }
+    }
+  </style>
+  <rect class="outer" x="8" y="8" width="504" height="364" rx="12" stroke-width="2"/>
+  <text class="h" x="28" y="42">人が判断すること</text>
+  <text class="b" x="28" y="68">定義と前提は、言いたいことを正しく写しているか</text>
+  <text class="b" x="28" y="92">（距離をこう定義してよいか、直角をこう書いてよいか）</text>
+  <rect class="inner" x="28" y="116" width="464" height="236" rx="10" stroke-width="2"/>
+  <text class="h" x="48" y="150">Lean が検査したこと</text>
+  <text class="b" x="48" y="176">前提と定義から、結論が一歩ずつ出ること</text>
+  <text class="code" x="48" y="222">前提  h : inner u v = 0</text>
+  <text class="code" x="48" y="250">定義  ‖u‖ や inner は Mathlib のもの</text>
+  <text class="code" x="48" y="292">結論  ‖u - v‖² = ‖u‖² + ‖v‖²</text>
+  <text class="b" x="48" y="328">ビルドが通った ＝ ここに飛躍が無い</text>
+</svg>
+<figcaption>外側の枠は人が判断すること：定義と前提は、言いたいことを正しく写しているか。内側の枠は Lean が検査したこと：前提と定義から、結論が一歩ずつ出ること。例として、前提 inner u v = 0、定義は Mathlib のもの、結論 ‖u - v‖² = ‖u‖² + ‖v‖² </figcaption></figure>
+<h2>2. 証明を1行ずつ追う：三平方の定理</h2>
+<p>直角三角形の、直角の頂点から出る2辺をベクトル u, v とします。
+斜辺は u − v です。
+u と v が直交する（内積が 0）なら、斜辺の長さの2乗は、2辺の長さの2乗の和です。</p>
+<pre><code class="language-lean">theorem pythagoras_vec (u v : EuclideanSpace ℝ (Fin 2)) (h : inner ℝ u v = 0) :
+    ‖u - v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2 := by
+  rw [norm_sub_sq_real]     -- Mathlib の補題「‖u - v‖² = ‖u‖² - 2 × (u と v の内積) + ‖v‖²」で左辺を書き換える
+                            -- （(a - b)² = a² - 2ab + b² のベクトル版）
+  rw [h]                    -- 前提 h で内積を 0 に置き換える →  ‖u‖² - 2 * 0 + ‖v‖² = ‖u‖² + ‖v‖²
+  ring                      -- 2 * 0 = 0 を消せば両辺は同じ
+</code></pre>
+<p>1行目の読み方です。</p>
+<ul>
+<li><code>(u v : EuclideanSpace ℝ (Fin 2))</code>：u と v は平面のベクトル。</li>
+<li><code>(h : inner ℝ u v = 0)</code>：前提。u と v の内積は 0（直交している）。<code>h</code> はこの前提に付けた名前。</li>
+<li><code>:</code> の右から <code>:= by</code> の手前まで：示したいこと。<code>‖u‖</code> は u の長さ。</li>
+</ul>
+<p>各行のあとのゴールを、Lean に表示させたものが次です（証明の各行の間に、その時点の様子を表示する命令 <code>trace_state</code> を挟んだ写し <code>examples/PythagorasGoals.lean</code> を走らせた）。
+3つのかたまりが、順に「始め」「1行目のあと」「2行目のあと」です。</p>
+<pre><code class="language-text">u v : EuclideanSpace ℝ (Fin 2)
+h : inner ℝ u v = 0
+⊢ ‖u - v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2
+u v : EuclideanSpace ℝ (Fin 2)
+h : inner ℝ u v = 0
+⊢ ‖u‖ ^ 2 - 2 * inner ℝ u v + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2
+u v : EuclideanSpace ℝ (Fin 2)
+h : inner ℝ u v = 0
+⊢ ‖u‖ ^ 2 - 2 * 0 + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>行</th>
+<th>やったこと</th>
+<th>ゴールの変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>rw [norm_sub_sq_real]</code></td>
+<td>Mathlib にある等式で、左辺を展開した形に書き換える</td>
+<td><code>‖u - v‖ ^ 2</code> が <code>‖u‖ ^ 2 - 2 * inner ℝ u v + ‖v‖ ^ 2</code> に</td>
+</tr>
+<tr>
+<td><code>rw [h]</code></td>
+<td>前提 h（内積 = 0）で置き換える</td>
+<td><code>inner ℝ u v</code> が <code>0</code> に</td>
+</tr>
+<tr>
+<td><code>ring</code></td>
+<td>式を展開・整理して、両辺が同じだと確かめる</td>
+<td><code>2 * 0</code> が消えて両辺が一致し、ゴールが無くなる</td>
+</tr>
+</tbody></table>
+<p>ゴールが無くなったところで証明は終わりです。</p>
+<p><code>rw [h]</code> の行で、前提 h（直交している）を使っています。
+この行が無ければ内積が残り、両辺は一致しません。
+証明を追うと、<strong>どの前提がどこで効いているか</strong>が分かります。</p>
+<p><code>norm_sub_sq_real</code> は Mathlib（Lean の数学ライブラリ）にある、証明済みの等式です。
+このリポジトリは Mathlib をビルド済みの形で取ってくるので、手元で検査し直しているのは自分で書いた証明の部分だけです。
+つまりこの「通った」は、Mathlib と Lean 本体を信じたうえでの結果です。依存ライブラリを信じてアプリのテストを回すのと同じ位置づけです。</p>
+<h2>3. 前提と定義で、主張の強さが変わる</h2>
+<p><code>Pythagoras.lean</code> には、三平方の定理が何通りか入っています。
+どれも「通った」ですが、示したことの強さが違います。</p>
+<p>一番素朴なのは、座標で置いた版です。
+まず、2点の距離の2乗を、座標の差の2乗の和として<strong>定義</strong>します。</p>
+<pre><code class="language-lean">def distSq (p q : ℝ × ℝ) : ℝ :=
+  (p.1 - q.1) ^ 2 + (p.2 - q.2) ^ 2
+</code></pre>
+<p>そのうえで、直角の頂点を原点に、2辺を x 軸と y 軸に置きます。</p>
+<pre><code class="language-lean">theorem pythagoras_on_axes (a b : ℝ) : distSq (a, 0) (0, b) = a ^ 2 + b ^ 2 := by
+  unfold distSq             -- distSq を定義で開く →  ((a, 0).1 - (0, b).1) ^ 2 + ((a, 0).2 - (0, b).2) ^ 2 = a ^ 2 + b ^ 2
+  simp                      -- `simp` は決まりきった簡単化をまとめてやる。組から成分を取り出し、- 0 や 0 - を整理する
+</code></pre>
+<p>証明は、定義を開いて整理するだけです。
+「距離の2乗 = x 方向の差の2乗 + y 方向の差の2乗」という定義そのものが、x 軸と y 軸が直角であることを前提にした三平方の定理だからです。
+<strong>この版は、定義に織り込んだことを取り出して見せただけで、三平方の定理を示したとはほとんど言えません。</strong></p>
+<p>同じファイルの <code>pythagoras_coord</code> は、三角形がどこにどんな向きで置かれていてもよい形です。
+直角は「C から A へと、C から B への2本のベクトルの内積が 0」という前提 <code>h</code> で書きます。</p>
+<pre><code class="language-lean">theorem pythagoras_coord (A B C : ℝ × ℝ)
+    (h : (A.1 - C.1) * (B.1 - C.1) + (A.2 - C.2) * (B.2 - C.2) = 0) :
+    distSq A B = distSq A C + distSq B C := by
+</code></pre>
+<p>軸に沿っていない、斜めの直角三角形でも成り立つ、と言える分だけ強くなりました。
+ただし、距離の定義は同じ <code>distSq</code> のままです。</p>
+<p>Mathlib には、角度で直角を書いた三平方の定理があります。
+<code>∠ A C B</code> は角 ACB の大きさで、<code>Real.pi / 2</code> は 90 度です。</p>
+<p><code>example</code> は、名前を付けない <code>theorem</code> です。</p>
+<pre><code class="language-lean">example (A B C : EuclideanSpace ℝ (Fin 2)) (h : ∠ A C B = Real.pi / 2) :
+    dist A B * dist A B = dist A C * dist A C + dist B C * dist B C :=
+  -- Mathlib の定理に p₁ = A, p₂ = C, p₃ = B を入れ、`.mpr` で「↔ の右から左へ」向きを取り出して、h を渡す。
+  (dist_sq_eq_dist_sq_add_dist_sq_iff_angle_eq_pi_div_two A C B).mpr h
+</code></pre>
+<p>元の Mathlib の定理は「直角である ⇔ a² + b² = c²」という同値の形で、逆向きも込みです。
+ファイルのコメントによると、平面に限らず何次元でも使える形で書かれています（Mathlib のソースは読んでいないので、この資料では未検証）。</p>
+<table>
+<thead>
+<tr>
+<th>版</th>
+<th>直角の書き方</th>
+<th>距離</th>
+<th>言えたこと</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>pythagoras_on_axes</code></td>
+<td>2辺を x 軸・y 軸に置く</td>
+<td>自作の <code>distSq</code></td>
+<td>定義をほぼそのまま言い直した</td>
+</tr>
+<tr>
+<td><code>pythagoras_coord</code></td>
+<td>内積 = 0 という前提</td>
+<td>自作の <code>distSq</code></td>
+<td>どこに、どの向きに置いた直角三角形でも</td>
+</tr>
+<tr>
+<td><code>pythagoras_vec</code>（2節）</td>
+<td>内積 = 0 という前提</td>
+<td>Mathlib の長さ <code>‖ ‖</code></td>
+<td>同上を、Mathlib のベクトルの言葉で</td>
+</tr>
+<tr>
+<td>Mathlib の定理</td>
+<td>角度が 90 度</td>
+<td>Mathlib の <code>dist</code></td>
+<td>角度で書いた直角から。逆も込み</td>
+</tr>
+</tbody></table>
+<p>どれも、Lean の答えは同じ「通った」です。
+違いは定理の文と定義に書いてあり、それを読むのは人です。
+自作の定義（<code>distSq</code>）が言いたいことを写しているかは、自分で読むしかありません。Mathlib の定義を使えば、読む対象が Mathlib の定義に移ります。</p>
+<p>プログラムの性質でも同じことが起きます。
+たとえば「ソート関数の出力は昇順に並んでいる」だけを定理にすると、どんな入力にも空のリストを返す関数でも成り立ってしまいます（空のリストは昇順だから）。
+「出力は入力の並べ替えである」も文に入れて、初めて言いたいことになります（この例は Lean では書いていない）。</p>
+<h2>4. TLA+ との違い</h2>
+<p><code>lean/basics/Basics/FirstSteps.lean</code> に、2つの考え方が並んでいます。</p>
+<pre><code class="language-lean">example : ∀ n, n &lt; 10 → n * n &lt; 100 := by
+  decide                  -- n = 0, 1, ..., 9 の 10 通りを計算して、どれも成り立つと確かめる
+</code></pre>
+<pre><code class="language-lean">theorem add_self_eq_two_mul (n : Nat) : n + n = 2 * n := by
+  omega                   -- 一次式の等式なので omega が証明を組み立てる
+</code></pre>
+<p>上は有限個を全部計算して確かめる、総当たりです。
+TLA+ は、同時に動く処理の設計を模型に書き、検査器 TLC がありうる状態を総当たりで調べて、壊れる手順（反例）を出す道具です。TLC がやるのも、この総当たりの考え方です。
+下は「どんな自然数 n でも」を、場合を並べずに理屈で示しています。n は無限にあるので、総当たりではできません。</p>
+<p>三平方の定理も同じで、実数の三角形は無限にありますが、Lean は文字のまま一度に示しました。
+そのかわり、TLA+ では機械が反例を探すのに対し、Lean では証明を人が書きます。</p>
+<p>TLA+ 側の話は <a href="../tla/README.md">TLA+ の「エラーなし」は何を保証したのか</a> にあります。
+どちらの道具も、「書いた前提のもとで」の結果を返すところは同じです。</p>
+<h2>5. 「証明が通った」と聞いたときに読むところ</h2>
+<ul>
+<li><input disabled="" type="checkbox"> 定理の文（<code>:</code> の右）を読み、示したことが言いたいことと合っているか</li>
+<li><input disabled="" type="checkbox"> 前提（<code>(h : ...)</code>）を読み、成り立ちうるか、強すぎないか</li>
+<li><input disabled="" type="checkbox"> 自作の定義（<code>def</code>）を読み、結論を織り込んでいないか</li>
+<li><input disabled="" type="checkbox"> 警告に <code>sorry</code> が無いか</li>
+<li><input disabled="" type="checkbox"> 何を信じた結果か（Mathlib などの依存と Lean 本体）</li>
+</ul>
+<h2>6. 理解度チェック</h2>
+<p><strong>問1.</strong> 同僚が「Lean で、このソート関数の性質を証明した。ビルドも通った」と言う。まず何を読むか。</p>
+<details>
+<summary>答え</summary><p>証明ではなく、定理の文と前提と定義です。
+ビルドが通ったことで分かるのは「書いた前提と定義から、書いた結論が出る」までで、その結論が言いたい性質かは文を読まないと分かりません（1節、3節）。
+警告に <code>sorry</code> が無いかも見ます。</p>
+</details><p><strong>問2.</strong> 2節の証明から <code>rw [h]</code> の行を消すと、どうなるか。</p>
+<details>
+<summary>答え</summary><p>通らなくなります。
+内積が 0 だと知らないまま <code>ring</code> が両辺を比べるので、一致しません。
+実際に消した写し（<code>examples/PythagorasWithoutH.lean</code>）では、Lean はこう返します。</p>
+<pre><code class="language-text">  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+error: unsolved goals
+⊢ ‖u‖ ^ 2 - inner ℝ u v * 2 + ‖v‖ ^ 2 = ‖u‖ ^ 2 + ‖v‖ ^ 2
+</code></pre>
+<p>ゴールに内積 <code>inner ℝ u v</code> が残っています。
+前提 h（直交している）を使っているのは <code>rw [h]</code> の1行だけなので、そこを消すと直角であることが証明のどこにも入りません。</p>
+</details><p><strong>問3.</strong> <code>pythagoras_on_axes</code> が通ったことは、「三平方の定理を Lean で示した」と言ってよい根拠になるか。</p>
+<details>
+<summary>答え</summary><p>ほとんどならない。
+距離の2乗を「x 方向の差の2乗 + y 方向の差の2乗」と定義した時点で、三平方の定理を織り込んでいるからです（3節）。
+示したのは、その定義を言い直したことです。</p>
+</details><p><strong>問4.</strong> TLA+ の TLC は、在庫の引き当ての模型を「3人が在庫2個を取り合う場合」に限って総当たりで調べる。Lean の三平方の定理は、何個の三角形を調べたか。</p>
+<details>
+<summary>答え</summary><p>1つも「調べて」はいません。
+三角形を1つずつ試すのではなく、文字（u, v）のまま、どの三角形でも成り立つことを一度に示しています（4節）。
+だから無限にある場合も扱えますが、そのかわり証明は人が書きます。</p>
+</details><h2>7. 持ち帰ること</h2>
+<p>「証明が通った」と聞いたら、<strong>証明ではなく、定理の文と前提と定義を読む</strong>。通ったことが保証するのは、そこから先に飛躍が無いことだけです。</p>
+<h2>付録：再現</h2>
+<pre><code class="language-sh">make lean-mathlib   # 1節のビルド（初回は Mathlib のビルド済みを約 7GB 取ってくる）
+make lean-broken    # 1節の、壊した証明のエラー
+make lean           # 4節の FirstSteps.lean を含む、Mathlib なしの例
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>ファイル</th>
+<th>中身</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>lean/with-mathlib/WithMathlib/Pythagoras.lean</code></td>
+<td>三平方の定理（座標版、ベクトル版、Mathlib の定理）</td>
+</tr>
+<tr>
+<td><code>lean/basics/broken/SumFormulaBroken.lean</code></td>
+<td>1節の、わざと壊した証明</td>
+</tr>
+<tr>
+<td><code>lean/basics/Basics/FirstSteps.lean</code></td>
+<td>4節の、総当たりと理屈の比較</td>
+</tr>
+<tr>
+<td><code>docs/lean/examples/Vacuous.lean</code></td>
+<td>1節の、前提が成り立ちえない定理</td>
+</tr>
+<tr>
+<td><code>docs/lean/examples/Sorry.lean</code></td>
+<td>1節の、<code>sorry</code> で飛ばした定理</td>
+</tr>
+<tr>
+<td><code>docs/lean/examples/PythagorasGoals.lean</code></td>
+<td>2節の、各行のあとのゴールを表示する写し</td>
+</tr>
+<tr>
+<td><code>docs/lean/examples/PythagorasWithoutH.lean</code></td>
+<td>理解度チェック 問2 の、<code>rw [h]</code> を消した写し</td>
+</tr>
+<tr>
+<td><code>docs/lean/checks.json</code></td>
+<td>本文の出力を再生成して照合するコマンド</td>
+</tr>
+</tbody></table>
+<p>検証は、リポジトリの直下で <code>npm i</code> をしたあと、explainer スキルの <code>verify-doc.mjs</code> にこのディレクトリを渡して走らせる。</p>
+<h2>付録：この資料が置いた前提</h2>
+<p>この資料は「TLA+ も Lean も知らない人向け」という依頼で書きました。それ以外の読み手の像は、書き手の推測です。</p>
+<ul>
+<li>高校数学（数列、帰納法、二次式の展開、三平方の定理、背理法）は分かる（理由：リポジトリの README がこの範囲を想定読者にしているため）</li>
+<li>Web のバックエンドやアプリを書くエンジニアで、テストや CI の緑は見慣れている（理由：リポジトリの TLA+ の例の題材から）</li>
+<li>チームのナレッジとして後から読み返し、1本に 10〜15 分を使う</li>
+</ul>
+<p>読み手の像が違っていたら直したいので、次を教えてください。</p>
+<ul>
+<li>帰納法や三平方の定理の高校での証明を、どのくらい覚えているか（忘れているなら、2節の前に高校の証明を1段落足す）</li>
+</ul>
+
+
+</main></body>
+</html>

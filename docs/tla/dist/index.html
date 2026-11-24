@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TLA+ の「エラーなし」は何を保証したのか</title>
+<style>
+:root { --bg: #ffffff; --fg: #1f2328; --muted: #57606a; --line: #d0d7de; --code: #f6f8fa; --accent: #0550ae; --fig: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0d1117; --fg: #e6edf3; --muted: #9da7b3; --line: #30363d; --code: #161b22; --accent: #79c0ff; --fig: #ffffff; }
+}
+:root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #9da7b3; --line: #30363d; --code: #161b22; --accent: #79c0ff; --fig: #ffffff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.75 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 96px; }
+h1 { font-size: 1.8rem; line-height: 1.35; }
+h2 { margin-top: 2.6em; padding-top: .6em; border-top: 1px solid var(--line); font-size: 1.35rem; }
+h3 { margin-top: 1.8em; font-size: 1.1rem; }
+a { color: var(--accent); }
+code { background: var(--code); padding: .1em .3em; border-radius: 4px; font-size: .9em; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; font-size: .93rem; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+blockquote { margin: 1em 0; padding: .2em 1em; border-left: 4px solid var(--line); color: var(--muted); }
+figure { margin: 1.5em 0; }
+figure svg { display: block; max-width: 100%; max-height: 720px; width: auto; height: auto; margin: 0 auto; background: var(--fig); border-radius: 6px; }
+main img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+figcaption { color: var(--muted); font-size: .9rem; text-align: center; margin-top: .4em; }
+.play { margin-left: .5em; white-space: nowrap; }
+details { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin: .6em 0; }
+summary { cursor: pointer; font-weight: 600; }
+nav.book { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: .93rem; }
+</style>
+</head>
+<body><main>
+
+<h1>TLA+ の「エラーなし」は何を保証したのか</h1>
+<blockquote>
+<p><strong>想定読者</strong>：TLA+ を知らない、Web のバックエンドやアプリを書くエンジニア。SQL の <code>UPDATE</code>、トランザクション、ロックは知っている前提で書いた（この前提は書き手の推測。理由は末尾の「この資料が置いた前提」）。
+<strong>省いたもの</strong>：道具の入れ方（<a href="../../README.md#%E9%81%93%E5%85%B7%E3%81%AE%E5%85%A5%E3%82%8C%E6%96%B9">リポジトリの README</a>）、TLA+ の文法の網羅、形式手法の一般論。
+<strong>所要時間</strong>：12 分。手元で走らせなくても読める。
+<strong>検証方法</strong>：本文に引用した出力とコードは、<code>checks.json</code> のコマンドで再実行し、実物と照合している（付録）。</p>
+</blockquote>
+<p>更新の消失、デッドロック、在庫の売りすぎ。
+「同時に動く処理が、割り込まれる順番しだいで壊れないか」という心配は、TLA+ の検査器 TLC に、ありうる順番を総当たりで調べさせられます。
+ただし TLC の「エラーなし」は、<strong>自分で書いた模型を、自分で決めた大きさで調べ尽くした</strong>という結果であって、証明でも、実装の保証でもありません。
+この資料は、その2つを、自分の設計レビューで使える形で伝えます。</p>
+<details>
+<summary>この資料の構成</summary><table>
+<thead>
+<tr>
+<th>節</th>
+<th>役割</th>
+<th>見せるもの</th>
+<th>なぜ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>自分の設計が TLA+ の出番かを判定する</td>
+<td>向く・向かないの表、模型の大きさ</td>
+<td>読み終えて最初に使うのはこの判定</td>
+</tr>
+<tr>
+<td>2</td>
+<td>反例の出力を読めるようにする</td>
+<td>更新の消失とデッドロックの、TLC の実際の出力と図</td>
+<td>TLC の答えの半分は反例。読めないと使えない</td>
+</tr>
+<tr>
+<td>3</td>
+<td>「エラーなし」の範囲を言えるようにする</td>
+<td>在庫の例の状態数、直した版の模型</td>
+<td>緑を過大に受け取るのが一番の落とし穴</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Lean との違いを一言で言えるようにする</td>
+<td>短い表</td>
+<td>2つを一括りにしないため</td>
+</tr>
+<tr>
+<td>5</td>
+<td>設計レビューに持ち帰る</td>
+<td>チェックリスト</td>
+<td>1〜3 節を、自分の設計に当てる形にする</td>
+</tr>
+</tbody></table>
+</details><h2>0. 一枚で</h2>
+<table>
+<thead>
+<tr>
+<th>問い</th>
+<th>答え</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>これは TLA+ で検査する話か</td>
+<td>「複数の処理が同じものを触り、割り込まれる順番しだいで壊れないか」なら向く。1つの関数の計算の正しさや、性能は向かない</td>
+</tr>
+<tr>
+<td>反例はどう読むか</td>
+<td><code>Error:</code> の行が結論。<code>State 1</code> から下が、最初の状態から壊れる状態までの手順。前の State と見比べて、変わった変数を追う</td>
+</tr>
+<tr>
+<td>「エラーなし」で何が言えるか</td>
+<td>書いた模型で、設定した大きさのとき、たどり着ける状態を全部調べて、書いた条件は破れなかった。それ以上（何人でも大丈夫、実装も大丈夫）は言っていない</td>
+</tr>
+<tr>
+<td>Lean とどう違うか</td>
+<td>TLA+ は有限の場合を総当たりする。Lean は人が書いた証明を検査し、無限の場合もまとめて示せる</td>
+</tr>
+</tbody></table>
+<h2>1. 自分の設計は、TLA+ の出番か</h2>
+<p>TLA+ で書くのは3つだけです。</p>
+<ol>
+<li>最初の状態</li>
+<li>起こりうる一手（「A が DB を読む」「B が書く」など）</li>
+<li>守ってほしい条件（どの状態でも成り立っていてほしいこと。<strong>不変条件</strong>と呼ぶ）</li>
+</ol>
+<p>「誰が先に動くか」は書きません。
+検査器の TLC が、ありうる順番を全部試し、条件が破れる順番があればその手順を出します。</p>
+<p>この性質から、向く話と向かない話が分かれます。</p>
+<table>
+<thead>
+<tr>
+<th>向く</th>
+<th>向かない</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>2つのリクエストが同じ行を読んで書き戻す（更新の消失）</td>
+<td>1つの関数の計算が正しいか（単体テストや Lean の領分）</td>
+</tr>
+<tr>
+<td>2つのトランザクションがロックを取り合う（デッドロック）</td>
+<td>応答が速いか、メモリが足りるか</td>
+</tr>
+<tr>
+<td>在庫の引き当て、二重送信、リトライと重複実行</td>
+<td>外部 API が仕様どおりに返すか</td>
+</tr>
+<tr>
+<td>キューの再配信、キャッシュと DB のずれ</td>
+<td>画面の見た目、使いやすさ</td>
+</tr>
+</tbody></table>
+<p>判定の目安は2つです。</p>
+<ul>
+<li>2つ以上の処理が、同じものを、途中で割り込まれうる形で触るか。</li>
+<li>「壊れた」を1行の条件で書けるか（「2人とも終わったら、いいね数は 2」「在庫は負にならない」）。</li>
+</ul>
+<p>両方 yes なら、TLA+ で小さな模型を書く価値があります。</p>
+<p>手間の目安として、次の節で使う「いいね数」の模型は、コメントと空行を除いて 25 行です（<code>examples/count-lines.sh</code> で数えた）。
+TLC は、その反例を1秒かからずに返します（出力の <code>Finished in 00s</code>）。</p>
+<p>次の節の例は、わざと答えの分かっている不具合（更新の消失）にしています。
+結論を知っている題材なら、TLC の出力の読み方だけに集中できるからです。
+定石（<code>UPDATE ... SET likes = likes + 1</code>、ロック順の統一）で潰せる不具合なら、模型を書くまでもないこともあります。
+TLA+ が効くのは、リトライと重複実行が重なるような、定石が効いているかを頭で追い切れない組み合わせのときです（この資料には、その規模の例は入れていません）。</p>
+<h2>2. 反例を読む</h2>
+<p>例は、「いいね数」を 1 増やす処理です。
+2つのリクエスト A, B が、どちらも「DB から読む → 読んだ値 + 1 を書き戻す」の2手で動きます。
+2つとも終われば 2 になっていてほしい。</p>
+<p>守ってほしい条件（不変条件）は、模型の中で1行です。</p>
+<pre><code class="language-tla">NoLostUpdate == (\A r \in Reqs : pc[r] = &quot;done&quot;) =&gt; likes = 2
+</code></pre>
+<p>「すべてのリクエスト r について <code>pc[r]</code>（r がどこまで進んだか）が <code>&quot;done&quot;</code> なら、<code>likes</code> は 2」と読みます。
+<code>pc</code> と、各リクエストが読んだ値を持つ <code>seen</code> は、リクエストごとの欄を持つ表です。</p>
+<details>
+<summary>2手（読む・書く）の模型のコード（読まなくても先へ進める）</summary><p><code>/\</code> は「かつ」、<code>&#39;</code> の付いた変数は「この一手のあとの値」です。</p>
+<pre><code class="language-tla">Read(r) ==
+  /\ pc[r] = &quot;read&quot;                         \* r がまだ読んでいないときだけ起こせる
+  /\ seen&#39; = [seen EXCEPT ![r] = likes]     \* r の手元の値を、今の likes にする（EXCEPT は「r の欄だけ書き換えた表」）
+  /\ pc&#39; = [pc EXCEPT ![r] = &quot;write&quot;]       \* r は次に書く番になる
+  /\ UNCHANGED likes                        \* DB の値は変わらない
+
+\* 一手その2: リクエスト r が DB に書き戻す。
+Write(r) ==
+  /\ pc[r] = &quot;write&quot;                        \* r が読み終えているときだけ起こせる
+  /\ likes&#39; = seen[r] + 1                   \* 「読んだときの値 + 1」を書く（今の likes ではない。ここが問題）
+  /\ pc&#39; = [pc EXCEPT ![r] = &quot;done&quot;]        \* r は終わり
+  /\ UNCHANGED seen                         \* 手元の値は変わらない
+</code></pre>
+</details><p><code>make tla-lost-update</code> で TLC に調べさせると、こう返ってきます（起動時のメッセージは省いた）。
+<code>[A |-&gt; 0, B |-&gt; 0]</code> は「A の欄が 0、B の欄が 0」の表です。</p>
+<pre><code class="language-text">Error: Invariant NoLostUpdate is violated.
+Error: The behavior up to this point is:
+State 1: &lt;Initial predicate&gt;
+/\ seen = [A |-&gt; 0, B |-&gt; 0]
+/\ pc = [A |-&gt; &quot;read&quot;, B |-&gt; &quot;read&quot;]
+/\ likes = 0
+
+State 2: &lt;Read line 33, col 3 to line 36, col 20 of module LostUpdate&gt;
+/\ seen = [A |-&gt; 0, B |-&gt; 0]
+/\ pc = [A |-&gt; &quot;write&quot;, B |-&gt; &quot;read&quot;]
+/\ likes = 0
+
+State 3: &lt;Read line 33, col 3 to line 36, col 20 of module LostUpdate&gt;
+/\ seen = [A |-&gt; 0, B |-&gt; 0]
+/\ pc = [A |-&gt; &quot;write&quot;, B |-&gt; &quot;write&quot;]
+/\ likes = 0
+
+State 4: &lt;Write line 40, col 3 to line 43, col 19 of module LostUpdate&gt;
+/\ seen = [A |-&gt; 0, B |-&gt; 0]
+/\ pc = [A |-&gt; &quot;done&quot;, B |-&gt; &quot;write&quot;]
+/\ likes = 1
+
+State 5: &lt;Write line 40, col 3 to line 43, col 19 of module LostUpdate&gt;
+/\ seen = [A |-&gt; 0, B |-&gt; 0]
+/\ pc = [A |-&gt; &quot;done&quot;, B |-&gt; &quot;done&quot;]
+/\ likes = 1
+
+13 states generated, 12 distinct states found, 3 states left on queue.
+</code></pre>
+<p>読む場所は4つです。</p>
+<ul>
+<li>1行目が結論です。条件 <code>NoLostUpdate</code> が破れる状態に、たどり着けた。</li>
+<li><code>State 1</code> から <code>State 5</code> が、最初の状態から破れた状態までの手順です。上から順に時間が進みます。</li>
+<li><code>&lt;Read line 33 ...&gt;</code> は「この状態に来るために起きた一手」です。ただし、A と B のどちらが動いたかは書いてありません。<code>pc</code> の欄を前の State と見比べて、変わった方が動いた方です。</li>
+<li><code>/\ 変数 = 値</code> が、その時点の全部の変数です。</li>
+</ul>
+<p>この手順を、誰が何をしたかで並べ直すと次の図になります（上の出力から機械的に作った図）。</p>
+<figure role="img" aria-label="TLC の反例を時系列にした図。State 2 で A が読んで 0 を得る。State 3 で B も読んで 0 を得る。State 4 で A が 0 + 1 を書き、State 5 で B も 0 + 1 を書く。2つとも終わっても likes は 1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="8 -5 488 387" width="488" height="387" data-t="5460" data-duration="5460">
+<defs><marker id="arrow-1f2328" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2328"/></marker><marker id="arrow-hollow-1f2328" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M 1 1 L 11 6 L 1 11 z" fill="#ffffff" stroke="#1f2328" stroke-width="1.2"/></marker></defs>
+<rect x="8" y="-5" width="488" height="387" fill="#ffffff"/>
+<g id="title" data-shape="text" transform="translate(254 22)"><text font-size="18" fill="#1f2328" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">TLC の反例: リクエスト A と B の更新が消える手順</tspan></text></g>
+<g id="life-A" data-shape="line" transform="translate(0 0)"><line x1="60" y1="87.4" x2="60" y2="365.4" stroke="#9ca3af" stroke-width="1" fill="none" stroke-dasharray="6 4"/></g>
+<g id="life-db" data-shape="line" transform="translate(0 0)"><line x1="252" y1="87.4" x2="252" y2="365.4" stroke="#9ca3af" stroke-width="1" fill="none" stroke-dasharray="6 4"/></g>
+<g id="life-B" data-shape="line" transform="translate(0 0)"><line x1="444" y1="87.4" x2="444" y2="365.4" stroke="#9ca3af" stroke-width="1" fill="none" stroke-dasharray="6 4"/></g>
+<g id="act-0" data-shape="rect" transform="translate(252 128.4)"><rect x="-5" y="-17" width="10" height="34" fill="#ffffff" stroke="#1f2328" stroke-width="1"/></g>
+<g id="act-1" data-shape="rect" transform="translate(252 196.4)"><rect x="-5" y="-17" width="10" height="34" fill="#ffffff" stroke="#1f2328" stroke-width="1"/></g>
+<g id="msg-0" data-shape="arrow" transform="translate(0 0)"><line x1="66" y1="111.4" x2="245" y2="111.4" stroke="#1f2328" stroke-width="1.5" fill="none" marker-end="url(#arrow-1f2328)"/></g>
+<g id="msg-0-label" data-shape="text" transform="translate(155.5 102.4)"><text font-size="12" fill="#1f2328" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">State 2: 読む</tspan></text></g>
+<g id="msg-1" data-shape="arrow" transform="translate(0 0)"><line x1="246" y1="145.4" x2="67" y2="145.4" stroke="#1f2328" stroke-width="1.5" fill="none" marker-end="url(#arrow-hollow-1f2328)" stroke-dasharray="6 4"/></g>
+<g id="msg-1-label" data-shape="text" transform="translate(156.5 136.4)"><text font-size="12" fill="#1f2328" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">0</tspan></text></g>
+<g id="msg-2" data-shape="arrow" transform="translate(0 0)"><line x1="438" y1="179.4" x2="259" y2="179.4" stroke="#1f2328" stroke-width="1.5" fill="none" marker-end="url(#arrow-1f2328)"/></g>
+<g id="msg-2-label" data-shape="text" transform="translate(348.5 170.4)"><text font-size="12" fill="#1f2328" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">State 3: 読む</tspan></text></g>
+<g id="msg-3" data-shape="arrow" transform="translate(0 0)"><line x1="258" y1="213.4" x2="437" y2="213.4" stroke="#1f2328" stroke-width="1.5" fill="none" marker-end="url(#arrow-hollow-1f2328)" stroke-dasharray="6 4"/></g>
+<g id="msg-3-label" data-shape="text" transform="translate(347.5 204.4)"><text font-size="12" fill="#1f2328" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">0</tspan></text></g>
+<g id="msg-4" data-shape="arrow" transform="translate(0 0)"><line x1="66" y1="247.4" x2="245" y2="247.4" stroke="#1f2328" stroke-width="1.5" fill="none" marker-end="url(#arrow-hollow-1f2328)"/></g>
+<g id="msg-4-label" data-shape="text" transform="translate(155.5 238.4)"><text font-size="12" fill="#1f2328" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">State 4: 0 + 1 を書く</tspan></text></g>
+<g id="msg-5" data-shape="arrow" transform="translate(0 0)"><line x1="438" y1="281.4" x2="259" y2="281.4" stroke="#1f2328" stroke-width="1.5" fill="none" marker-end="url(#arrow-hollow-1f2328)"/></g>
+<g id="msg-5-label" data-shape="text" transform="translate(348.5 272.4)"><text font-size="12" fill="#1f2328" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">State 5: 0 + 1 を書く</tspan></text></g>
+<g id="part-A" data-shape="rect" transform="translate(60 72)"><rect x="-36" y="-15.4" width="72" height="30.8" rx="15.4" fill="#ffffff" stroke="#1f2328" stroke-width="1.5"/><text font-size="14" fill="#1f2328" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">A</tspan></text></g>
+<g id="part-db" data-shape="rect" transform="translate(252 72)"><rect x="-56" y="-15.4" width="112" height="30.8" rx="6" fill="#ffffff" stroke="#1f2328" stroke-width="1.5"/><text font-size="14" fill="#1f2328" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">DB（likes）</tspan></text></g>
+<g id="part-B" data-shape="rect" transform="translate(444 72)"><rect x="-36" y="-15.4" width="72" height="30.8" rx="15.4" fill="#ffffff" stroke="#1f2328" stroke-width="1.5"/><text font-size="14" fill="#1f2328" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif"><tspan x="0" y="0">B</tspan></text></g>
+</svg><figcaption>TLC の反例を時系列にした図。State 2 で A が読んで 0 を得る。State 3 で B も読んで 0 を得る。State 4 で A が 0 + 1 を書き、State 5 で B も 0 + 1 を書く。2つとも終わっても likes は 1 <a class="play" href="lost-update.html">▶ 1 ステップずつ再生する</a></figcaption></figure>
+<p>B は、A が書く前の値（0）を持ったまま書きました。
+<strong>2つとも終わったのに likes は 1 で、A の更新が消えています。</strong></p>
+<p>最後の行の <code>12 distinct states found</code> は、反例が見つかるまでに調べた状態の数です。
+<code>3 states left on queue</code> は、反例が見つかった時点で止めたので、調べ残しがあるという意味です。
+TLC は手数の少ない順に調べる（出力の冒頭の <code>breadth-first search</code>）ので、出てくる反例はいちばん短い手順です。</p>
+<p>条件を書かなくても TLC が見つけるものが1つあります。「まだ終わっていないのに、誰も次の一手を起こせない状態」、つまりデッドロックです。
+<code>tla/02_deadlock/</code> は、2つのトランザクションが逆の順でロックを取る模型で、不変条件を1つも書いていませんが、TLC はこう返します。</p>
+<pre><code class="language-text">Error: Deadlock reached.
+Error: The behavior up to this point is:
+State 1: &lt;Initial predicate&gt;
+/\ owner = [a |-&gt; &quot;free&quot;, b |-&gt; &quot;free&quot;]
+/\ step = [T1 |-&gt; 0, T2 |-&gt; 0]
+
+State 2: &lt;Acquire line 31, col 3 to line 35, col 45 of module Deadlock&gt;
+/\ owner = [a |-&gt; &quot;T1&quot;, b |-&gt; &quot;free&quot;]
+/\ step = [T1 |-&gt; 1, T2 |-&gt; 0]
+
+State 3: &lt;Acquire line 31, col 3 to line 35, col 45 of module Deadlock&gt;
+/\ owner = [a |-&gt; &quot;T1&quot;, b |-&gt; &quot;T2&quot;]
+/\ step = [T1 |-&gt; 1, T2 |-&gt; 1]
+</code></pre>
+<p><code>owner</code> は各行のロックを誰が持っているか、<code>step</code> は各トランザクションが何個目まで取ったかです。
+State 3 で、T1 が a を、T2 が b を持ったまま、互いに相手の行を待っています。どちらも次の一手を起こせません。
+ロックを取る順番を全員 a → b にそろえた版（<code>DeadlockFixed.tla</code>）は、<code>make tla-deadlock-fixed</code> でエラーなしになります。</p>
+<h2>3. 「エラーなし」の範囲</h2>
+<h3>3.1 総当たりであって、証明ではない</h3>
+<p><code>tla/03_stock/</code> は在庫の引き当てです。
+人数と在庫数を模型の中で決めず、TLC への指示書（<code>Stock.cfg</code>）で決めます。
+条件は「在庫は負にならない」「残りの在庫 + 売れた数 = 最初の在庫数」の2つです。
+買う一手は、在庫の確認と引き算が1つの一手になっています（SQL なら <code>UPDATE items SET stock = stock - 1 WHERE ... AND stock &gt; 0</code> の1文）。</p>
+<pre><code class="language-tla">Buy(b) ==
+  /\ result[b] = &quot;waiting&quot;                      \* b がまだ試していない
+  /\ stock &gt; 0                                  \* 在庫がある
+  /\ stock&#39; = stock - 1                         \* 1個減らす
+  /\ result&#39; = [result EXCEPT ![b] = &quot;bought&quot;]  \* b は買えた
+</code></pre>
+<p>指示書の設定は、3人が在庫2個を取り合う場合です。</p>
+<pre><code class="language-text">CONSTANTS
+  Buyers = {&quot;b1&quot;, &quot;b2&quot;, &quot;b3&quot;}
+  InitialStock = 2
+</code></pre>
+<pre><code class="language-text">Model checking completed. No error has been found.
+16 states generated, 10 distinct states found, 0 states left on queue.
+</code></pre>
+<p><code>0 states left on queue</code> は、調べ残しが無いことです。
+たどり着ける 10 個の状態を全部調べ、どれでも2つの条件が成り立った、という意味です。</p>
+<p>同じ模型を、6人・在庫3個で調べ直すと、状態は 182 個に増えます（指示書は <code>examples/Stock-6buyers-3stock.cfg</code>）。</p>
+<pre><code class="language-text">Model checking completed. No error has been found.
+357 states generated, 182 distinct states found, 0 states left on queue.
+</code></pre>
+<p>どちらの結果も、言っているのは「この人数と在庫数では大丈夫だった」だけです。
+100人・在庫50個の場合も、「何人でも」も、TLC は調べていません。
+人数を増やすと状態の数は急に増えるので、いつかは調べ尽くせなくなります。</p>
+<p>実務では、これでも役に立つことが多いです。
+順番の不具合の多くは、2〜3個の処理の小さな組み合わせで、もう現れるからです。
+ただしそれはよく言われる経験則で、TLC が保証したことではありません（この資料でも確かめていません）。
+「どんな大きさでも」と言い切りたいなら、証明が要ります（<a href="../lean/README.md">Lean の資料</a>の領分です）。</p>
+<h3>3.2 模型は実装ではない</h3>
+<p>更新の消失の直した版（<code>LostUpdateFixed.tla</code>）は、読むのと書くのを、割り込まれない一手にまとめたものです。</p>
+<pre><code class="language-tla">Incr(r) ==
+  /\ pc[r] = &quot;todo&quot;                     \* r がまだ済んでいないときだけ起こせる
+  /\ likes&#39; = likes + 1                 \* この一手の直前の likes に 1 を足す（間に他人は割り込めない）
+  /\ pc&#39; = [pc EXCEPT ![r] = &quot;done&quot;]    \* r は終わり
+</code></pre>
+<pre><code class="language-text">Model checking completed. No error has been found.
+5 states generated, 4 distinct states found, 0 states left on queue.
+</code></pre>
+<p>この緑が言っているのは、「<code>likes + 1</code> を割り込まれずに書けるなら、更新は消えない」です。
+SQL なら <code>UPDATE posts SET likes = likes + 1 WHERE ...</code> に当たります。</p>
+<p>TLC は、次のどれも確かめていません。</p>
+<ul>
+<li>実際のコードが、本当にその1文の SQL を投げているか（ORM が読んでから書く2文に分けていないか）。</li>
+<li>DB が、その1文を本当に割り込まれずに実行するか。</li>
+<li>模型に書かなかったもの（リトライ、タイムアウト、3つ目のリクエスト）が起きても大丈夫か。</li>
+</ul>
+<p><strong>模型に「割り込まれない」と書いたのは人で、TLC はそれを前提として受け取っただけです。</strong>
+模型と実装がずれていないかは、コードレビューやテストで別に確かめます。</p>
+<p>同じ理由で、条件を書き忘れたものは、破れても報告されません。
+TLC が調べるのは、指示書に書いた不変条件（と、既定で有効なデッドロックの検査）だけです。
+TLC は「次の一手が1つも無い状態」をすべてデッドロックと呼ぶので、全員が正常に終わって止まった状態もそれに当たります。
+そのため <code>LostUpdate.cfg</code> はデッドロックの検査を切っていて、これも人が決めた範囲です。</p>
+<h2>4. Lean との違い</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>TLA+（TLC）</th>
+<th>Lean</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>書くもの</td>
+<td>仕組みの模型と、守ってほしい条件</td>
+<td>示したい命題と、その証明</td>
+</tr>
+<tr>
+<td>機械がやること</td>
+<td>たどり着ける状態を全部調べる</td>
+<td>証明の一歩一歩が正しいかを検査する</td>
+</tr>
+<tr>
+<td>だめなとき</td>
+<td>条件が破れるまでの手順（反例）</td>
+<td>証明が止まった行と、残っている示すべきこと</td>
+</tr>
+<tr>
+<td>言える範囲</td>
+<td>設定した大きさの場合だけ</td>
+<td>文字で書いた「すべての場合」</td>
+</tr>
+<tr>
+<td>考えるのは</td>
+<td>模型と条件。順番は機械が探す</td>
+<td>証明そのもの。機械は検査する</td>
+</tr>
+</tbody></table>
+<p>共通するのは、どちらも「書いた前提のもとで」の結果だということです。
+Lean 側の話は <a href="../lean/README.md">Lean の「証明が通った」は何を保証したのか</a> にあります。</p>
+<h2>5. 自分の設計に当てる前のチェックリスト</h2>
+<ul>
+<li><input disabled="" type="checkbox"> 2つ以上の処理が、同じものを、割り込まれうる形で触るか</li>
+<li><input disabled="" type="checkbox"> 「壊れた」を1行の条件で書けるか</li>
+<li><input disabled="" type="checkbox"> 模型の「一手」は、実装で本当に割り込まれない単位か（1文の SQL、1回のロックの中など）</li>
+<li><input disabled="" type="checkbox"> 調べる大きさ（人数・個数）を決めたか。その大きさで足りると考える理由を言えるか</li>
+<li><input disabled="" type="checkbox"> 「エラーなし」を報告するとき、模型の前提と調べた大きさを一緒に書いたか</li>
+</ul>
+<h2>6. 理解度チェック</h2>
+<p><strong>問1.</strong> 「ユーザーのプロフィール画像を縮小する関数が、縦横比を保つか」を TLA+ で検査するのは向いているか。</p>
+<details>
+<summary>答え</summary><p>向いていない。
+処理が1つで、順番の組み合わせが無いからです。
+単体テストか、言い切りたいなら Lean のような証明の道具の話です（1節の表）。</p>
+</details><p><strong>問2.</strong> 反例の出力に <code>State 3: &lt;Read line 33, ...&gt;</code> とある。この一手で動いたのが A か B かは、どこを見れば分かるか。</p>
+<details>
+<summary>答え</summary><p><code>State 2</code> と <code>State 3</code> の <code>pc</code> の欄を見比べ、値が変わった方です。
+2節の出力では、B の欄が <code>&quot;read&quot;</code> から <code>&quot;write&quot;</code> に変わっているので、B が読みました。</p>
+</details><p><strong>問3.</strong> 在庫の模型が、3人・在庫2個で「エラーなし」だった。「この在庫の引き当ては、売りすぎない」と報告してよいか。</p>
+<details>
+<summary>答え</summary><p>そのままでは言いすぎです。
+言えるのは「この模型で、3人・在庫2個の場合を全部調べて、売りすぎる状態は無かった」までです（3.1 節）。
+さらに、模型の <code>Buy</code> が1つの一手（割り込まれない）になっていることが、実装の SQL でも成り立つかは別に確かめる必要があります（3.2 節）。</p>
+</details><p><strong>問4.</strong> 直した版の模型が「エラーなし」になったのに、本番で更新が消えた。考えられる理由を1つ挙げよ。</p>
+<details>
+<summary>答え</summary><p>模型では「読んで足して書く」を割り込まれない一手と書いたが、実装は読んでから書く2文の SQL だった、などです。
+TLC は模型を調べただけで、実装が模型どおりかは調べていません（3.2 節）。</p>
+</details><h2>7. 持ち帰ること</h2>
+<p>TLC の「エラーなし」を聞いたら、<strong>どの模型を、どの大きさで調べたか</strong>を一緒に聞く。それが、この緑の届く範囲です。</p>
+<h2>付録：再現</h2>
+<pre><code class="language-sh">make tla-lost-update        # 2節の反例
+make tla-stock              # 3.1節（3人・在庫2個）
+make tla-lost-update-fixed  # 3.2節
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>ファイル</th>
+<th>中身</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tla/01_lost_update/</code></td>
+<td>更新の消失。壊れている版と直した版</td>
+</tr>
+<tr>
+<td><code>tla/02_deadlock/</code></td>
+<td>デッドロック。壊れている版と直した版</td>
+</tr>
+<tr>
+<td><code>tla/03_stock/</code></td>
+<td>在庫の引き当て</td>
+</tr>
+<tr>
+<td><code>docs/tla/examples/Stock-6buyers-3stock.cfg</code></td>
+<td>3.1 節の、6人・在庫3個の指示書</td>
+</tr>
+<tr>
+<td><code>docs/tla/figures/trace-to-sequence.mjs</code></td>
+<td>TLC の反例の出力から、2節の図を作るスクリプト</td>
+</tr>
+<tr>
+<td><code>docs/tla/checks.json</code></td>
+<td>本文の出力と図を再生成して照合するコマンド</td>
+</tr>
+</tbody></table>
+<p>検証は、リポジトリの直下で <code>npm i</code> をしたあと、explainer スキルの <code>verify-doc.mjs</code> にこのディレクトリを渡して走らせる。</p>
+<h2>付録：この資料が置いた前提</h2>
+<p>この資料は「TLA+ も Lean も知らない人向け」という依頼で書きました。それ以外の読み手の像は、書き手の推測です。</p>
+<ul>
+<li>Web のバックエンドやアプリを書くエンジニア（理由：このリポジトリの例が、更新の消失・デッドロック・在庫の引き当てを題材にしているため）</li>
+<li>チームのナレッジとして後から読み返し、1本に 10〜15 分を使う</li>
+</ul>
+<p>読み手の像が違っていたら直したいので、次を教えてください。</p>
+<ul>
+<li>読んだあと、設計レビューに TLA+ を入れるかを決めたいのか、まず知っておきたいだけか（前者なら 1 節と 5 節を厚くする）</li>
+</ul>
+
+
+</main></body>
+</html>
