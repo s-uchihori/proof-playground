@@ -1,0 +1,9 @@
+# 落としてくる道具（scripts/setup-tla.sh が置く）
+/tools/
+# TLC が作る作業ファイル
+/.tlc/
+states/
+*_TTrace_*.tla
+*_TTrace_*.bin
+# Lean のビルド成果物と、Mathlib などの依存（数 GB）
+.lake/

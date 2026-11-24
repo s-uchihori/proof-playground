@@ -1,0 +1,13 @@
+# Mathlib（Lean の数学ライブラリ）を使う例のパッケージ。
+name = "with-mathlib"
+defaultTargets = ["WithMathlib"]
+
+# 依存: Mathlib。版は lean-toolchain の Lean と同じ番号のタグに固定する。
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.36.0"
+
+# ビルドの対象。WithMathlib.lean と、そこから import している WithMathlib/ の下のファイル。
+[[lean_lib]]
+name = "WithMathlib"

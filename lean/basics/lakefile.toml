@@ -1,0 +1,8 @@
+# Mathlib を使わない例のパッケージ。Lean 本体だけでビルドできる。
+name = "basics"
+defaultTargets = ["Basics"]
+
+# ビルドの対象。Basics.lean と、そこから import している Basics/ の下のファイル。
+# broken/ の下はここに含まれないので、ビルドされない。
+[[lean_lib]]
+name = "Basics"
